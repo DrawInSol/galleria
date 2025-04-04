@@ -4,8 +4,8 @@ const cloudinary = require("cloudinary").v2;
 const cors = require("cors");
 
 const app = express();
-app.use(cors()); // Permitir solicitudes desde tu frontend
-app.use(express.json({ limit: "10mb" })); // Permitir payloads grandes para imágenes
+app.use(cors());
+app.use(express.json({ limit: "10mb" }));
 
 // Configurar Cloudinary
 cloudinary.config({
@@ -14,15 +14,15 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Endpoint para subir imágenes
+// SUBIR IMAGEN
 app.post("/upload", async (req, res) => {
   const { image, category, artName } = req.body;
 
   try {
     const result = await cloudinary.uploader.upload(image, {
       folder: "drawsol_gallery",
-      tags: [category], // Usar la categoría como etiqueta
-      public_id: `${artName}_${Date.now()}`, // Nombre único
+      tags: [category],
+      public_id: `${artName}_${Date.now()}`,
       resource_type: "image"
     });
     res.json({ url: result.secure_url });
@@ -32,25 +32,27 @@ app.post("/upload", async (req, res) => {
   }
 });
 
-// Endpoint para obtener imágenes de la galería
+// OBTENER GALERÍA (filtrada o no)
 app.get("/gallery", async (req, res) => {
   const { category } = req.query;
 
   try {
     let resources;
+
     if (category && category !== 'all') {
-      // Buscar solo por categoría (etiqueta)
+      // Si hay categoría: buscar por tag
       const result = await cloudinary.api.resources_by_tag(category, {
-        max_results: 100,
-        resource_type: "image"
+        resource_type: "image",
+        max_results: 100
       });
       resources = result.resources;
     } else {
-      // Buscar todo
+      // Si no: cargar todas
       const result = await cloudinary.api.resources({
+        type: "upload",
         prefix: "drawsol_gallery",
-        max_results: 100,
-        resource_type: "image"
+        resource_type: "image",
+        max_results: 100
       });
       resources = result.resources;
     }
@@ -67,13 +69,12 @@ app.get("/gallery", async (req, res) => {
   }
 });
 
-
-// Endpoint raíz
+// TEST
 app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
 });
 
-// Iniciar servidor
+// INICIAR SERVIDOR
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
