@@ -34,26 +34,39 @@ app.post("/upload", async (req, res) => {
 
 // Endpoint para obtener imágenes de la galería
 app.get("/gallery", async (req, res) => {
-  const { category } = req.query; // Filtrar por categoría (opcional)
+  const { category } = req.query;
 
   try {
-    const result = await cloudinary.api.resources({
-      resource_type: "image",
-      prefix: "drawsol_gallery", // Solo imágenes de esta carpeta
-      tags: category ? true : false, // Incluir etiquetas si se filtra
-      tag: category || null, // Filtrar por categoría si se proporciona
-      max_results: 100
-    });
-    const images = result.resources.map(img => ({
+    let resources;
+    if (category && category !== 'all') {
+      // Buscar solo por categoría (etiqueta)
+      const result = await cloudinary.api.resources_by_tag(category, {
+        max_results: 100,
+        resource_type: "image"
+      });
+      resources = result.resources;
+    } else {
+      // Buscar todo
+      const result = await cloudinary.api.resources({
+        prefix: "drawsol_gallery",
+        max_results: 100,
+        resource_type: "image"
+      });
+      resources = result.resources;
+    }
+
+    const images = resources.map(img => ({
       url: img.secure_url,
-      category: img.tags[0] || "Sin categoría"
+      category: img.tags[0] || "Uncategorized"
     }));
+
     res.json(images);
   } catch (error) {
     console.error("❌ Error al obtener galería:", error);
     res.status(500).json({ error: "Error al obtener la galería" });
   }
 });
+
 
 // Endpoint raíz
 app.get("/", (req, res) => {
