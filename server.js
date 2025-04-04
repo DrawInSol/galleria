@@ -19,6 +19,7 @@ app.post("/upload", async (req, res) => {
   const { image, category, artName } = req.body;
 
   try {
+    // Usar la categoría tal como se pasa (ya debería estar en el formato correcto desde el frontend)
     const result = await cloudinary.uploader.upload(image, {
       folder: "drawsol_gallery",
       tags: [category],
@@ -40,7 +41,7 @@ app.get("/gallery", async (req, res) => {
     let resources;
 
     if (category && category !== 'all') {
-      // Si hay categoría: buscar por tag
+      // No normalizar la categoría, usar tal como se pasa
       const result = await cloudinary.api.resources_by_tag(category, {
         resource_type: "image",
         max_results: 100
@@ -57,10 +58,11 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
-    // Mapear los recursos, manejando el caso en que img.tags sea undefined
+    // Mapear los recursos, incluyendo created_at
     const images = resources.map(img => ({
       url: img.secure_url,
-      category: img.tags && img.tags.length > 0 ? img.tags[0] : "Uncategorized"
+      category: img.tags && img.tags.length > 0 ? img.tags[0] : "Uncategorized",
+      created_at: img.created_at
     }));
 
     res.json(images);
