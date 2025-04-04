@@ -57,9 +57,10 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
+    // Mapear los recursos, manejando el caso en que img.tags sea undefined
     const images = resources.map(img => ({
       url: img.secure_url,
-      category: img.tags[0] || "Uncategorized"
+      category: img.tags && img.tags.length > 0 ? img.tags[0] : "Uncategorized"
     }));
 
     res.json(images);
