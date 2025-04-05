@@ -16,7 +16,7 @@ cloudinary.config({
 
 // SUBIR IMAGEN
 app.post("/upload", async (req, res) => {
-  const { image, category, artName } = req.body;
+  const { image, category, artName, wallet } = req.body;
 
   try {
     // Usar la categoría tal como se pasa (ya debería estar en el formato correcto desde el frontend)
