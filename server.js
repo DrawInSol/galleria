@@ -3,6 +3,14 @@ const express = require("express");
 const cloudinary = require("cloudinary").v2;
 const cors = require("cors");
 
+const { Pool } = require("pg");
+
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false } // importante para Railway
+});
+
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
