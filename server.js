@@ -24,54 +24,53 @@ cloudinary.config({
 
 // SUBIR IMAGEN
 app.post("/upload", async (req, res) => {
-  const { image, category, artName } = req.body;
+  const { image, category, artName, wallet } = req.body;
 
   try {
-    // Usar la categoría tal como se pasa (ya debería estar en el formato correcto desde el frontend)
     const result = await cloudinary.uploader.upload(image, {
       folder: "drawsol_gallery",
       tags: [category],
       public_id: `${artName}_${Date.now()}`,
-      resource_type: "image"
+      resource_type: "image",
+      context: { caption: artName, wallet }
     });
+
+    // 🔸 Insertar en PostgreSQL
+    await db.query(
+      "INSERT INTO imagenes (url, category, art_name, wallet) VALUES ($1, $2, $3, $4)",
+      [result.secure_url, category, artName, wallet]
+    );
+
     res.json({ url: result.secure_url });
   } catch (error) {
-    console.error("❌ Error al subir imagen:", error);
-    res.status(500).json({ error: "Error al subir la imagen" });
+    console.error("❌ Error:", error);
+    res.status(500).json({ error: "No se pudo subir" });
   }
 });
+
 
 // OBTENER GALERÍA (filtrada o no)
 app.get("/gallery", async (req, res) => {
   const { category } = req.query;
 
   try {
-    let resources;
+    let query = "SELECT * FROM imagenes";
+    let values = [];
 
-    if (category && category !== 'all') {
-      // No normalizar la categoría, usar tal como se pasa
-      const result = await cloudinary.api.resources_by_tag(category, {
-        resource_type: "image",
-        max_results: 100
-      });
-      resources = result.resources;
+    if (category && category !== "all") {
+      query += " WHERE category = $1 ORDER BY created_at DESC";
+      values.push(category);
     } else {
-      // Si no: cargar todas
-      const result = await cloudinary.api.resources({
-        type: "upload",
-        prefix: "drawsol_gallery",
-        resource_type: "image",
-        max_results: 100
-      });
-      resources = result.resources;
+      query += " ORDER BY created_at DESC";
     }
 
-    // Mapear los recursos, incluyendo created_at
-    const images = resources.map(img => ({
-      url: img.secure_url,
-      category: img.tags && img.tags.length > 0 ? img.tags[0] : "Uncategorized",
-      created_at: img.created_at
-    }));
+    const result = await db.query(query, values);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Error al obtener galería:", error);
+    res.status(500).json({ error: "Error al obtener la galería" });
+  }
+});
 
     res.json(images);
   } catch (error) {
