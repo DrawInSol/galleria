@@ -16,21 +16,16 @@ cloudinary.config({
 
 // SUBIR IMAGEN
 app.post("/upload", async (req, res) => {
-  const { image, category, artName, wallet } = req.body;
+  const { image, category, artName } = req.body;
 
   try {
     // Usar la categoría tal como se pasa (ya debería estar en el formato correcto desde el frontend)
     const result = await cloudinary.uploader.upload(image, {
-  folder: "drawsol_gallery",
-  tags: [category],
-  public_id: `${artName}_${Date.now()}`,
-  resource_type: "image",
-  context: {
-    caption: artName,
-    wallet: wallet
-  }
-});
-
+      folder: "drawsol_gallery",
+      tags: [category],
+      public_id: `${artName}_${Date.now()}`,
+      resource_type: "image"
+    });
     res.json({ url: result.secure_url });
   } catch (error) {
     console.error("❌ Error al subir imagen:", error);
@@ -65,13 +60,10 @@ app.get("/gallery", async (req, res) => {
 
     // Mapear los recursos, incluyendo created_at
     const images = resources.map(img => ({
-  url: img.secure_url,
-  category: img.tags?.[0] || "Uncategorized",
-  created_at: img.created_at,
-  title: img.context?.custom?.caption || "Untitled",
-  wallet: img.context?.custom?.wallet || "Unknown"
-}));
-
+      url: img.secure_url,
+      category: img.tags && img.tags.length > 0 ? img.tags[0] : "Uncategorized",
+      created_at: img.created_at
+    }));
 
     res.json(images);
   } catch (error) {
