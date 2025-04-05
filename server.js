@@ -3,14 +3,6 @@ const express = require("express");
 const cloudinary = require("cloudinary").v2;
 const cors = require("cors");
 
-const { Pool } = require("pg");
-
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // importante para Railway
-});
-
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -32,45 +24,49 @@ app.post("/upload", async (req, res) => {
       tags: [category],
       public_id: `${artName}_${Date.now()}`,
       resource_type: "image",
-      context: { caption: artName, wallet }
+      context: {
+        caption: artName,
+        wallet: wallet
+      }
     });
-
-    // 🔸 Insertar en PostgreSQL
-    await db.query(
-      "INSERT INTO imagenes (url, category, art_name, wallet) VALUES ($1, $2, $3, $4)",
-      [result.secure_url, category, artName, wallet]
-    );
 
     res.json({ url: result.secure_url });
   } catch (error) {
-    console.error("❌ Error:", error);
-    res.status(500).json({ error: "No se pudo subir" });
+    console.error("❌ Error al subir imagen:", error);
+    res.status(500).json({ error: "Error al subir la imagen" });
   }
 });
-
 
 // OBTENER GALERÍA (filtrada o no)
 app.get("/gallery", async (req, res) => {
   const { category } = req.query;
 
   try {
-    let query = "SELECT * FROM imagenes";
-    let values = [];
+    let resources;
 
-    if (category && category !== "all") {
-      query += " WHERE category = $1 ORDER BY created_at DESC";
-      values.push(category);
+    if (category && category !== 'all') {
+      const result = await cloudinary.api.resources_by_tag(category, {
+        resource_type: "image",
+        max_results: 100
+      });
+      resources = result.resources;
     } else {
-      query += " ORDER BY created_at DESC";
+      const result = await cloudinary.api.resources({
+        type: "upload",
+        prefix: "drawsol_gallery",
+        resource_type: "image",
+        max_results: 100
+      });
+      resources = result.resources;
     }
 
-    const result = await db.query(query, values);
-    res.json(result.rows);
-  } catch (error) {
-    console.error("❌ Error al obtener galería:", error);
-    res.status(500).json({ error: "Error al obtener la galería" });
-  }
-});
+    const images = resources.map(img => ({
+      url: img.secure_url,
+      category: img.tags?.[0] || "Uncategorized",
+      created_at: img.created_at,
+      title: img.context?.custom?.caption || "Untitled",
+      wallet: img.context?.custom?.wallet || "Unknown"
+    }));
 
     res.json(images);
   } catch (error) {
