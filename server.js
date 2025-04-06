@@ -18,15 +18,19 @@ cloudinary.config({
 app.post("/upload", async (req, res) => {
   const { image, category, artName, wallet } = req.body;
 
+  if (!image || !category || !artName || !wallet) {
+    return res.status(400).json({ error: "Faltan campos requeridos" });
+  }
+
   try {
     const result = await cloudinary.uploader.upload(image, {
       folder: "drawsol_gallery",
-      tags: [category],
+      tags: [category], // Categoría como tag
       public_id: `${artName}_${Date.now()}`,
       resource_type: "image",
       context: {
-        caption: artName,
-        wallet: wallet
+        "custom.caption": artName, // Usamos el formato correcto para Cloudinary
+        "custom.wallet": wallet    // Aseguramos que wallet se suba al context
       }
     });
 
@@ -44,10 +48,11 @@ app.get("/gallery", async (req, res) => {
   try {
     let resources;
 
-    if (category && category !== 'all') {
+    if (category && category !== "all") {
       const result = await cloudinary.api.resources_by_tag(category, {
         resource_type: "image",
-        max_results: 100
+        max_results: 100,
+        tags: true // Aseguramos que los tags se incluyan en la respuesta
       });
       resources = result.resources;
     } else {
@@ -55,17 +60,16 @@ app.get("/gallery", async (req, res) => {
         type: "upload",
         prefix: "drawsol_gallery",
         resource_type: "image",
-        max_results: 100
+        max_results: 100,
+        tags: true
       });
       resources = result.resources;
     }
 
-    const images = resources.map(img => ({
+    const images = resources.map((img) => ({
       url: img.secure_url,
-      category: img.tags?.[0] || "Uncategorized",
-      created_at: img.created_at,
-      title: img.context?.custom?.caption || "Untitled",
-      wallet: img.context?.custom?.wallet || "Unknown"
+      category: img.tags?.[0] || "Uncategorized", // Tomamos el primer tag como categoría
+      created_at: img.created_at
     }));
 
     res.json(images);
