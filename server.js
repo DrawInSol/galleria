@@ -93,22 +93,65 @@ const pool = new Pool({
 });
 
 // Ruta para guardar un voto
+const { Connection, PublicKey, clusterApiUrl } = require('@solana/web3.js');
+const bs58 = require('bs58');
+
+// CONFIGURA TU TOKEN
+const MINT_ADDRESS = "TU_MINT_ADDRESS"; // cámbialo por el mint real
+const MIN_TOKENS_REQUIRED = 10;
+
 app.post("/vote", async (req, res) => {
-  const { user_wallet, image_id, vote_value } = req.body;
+  const { user_wallet, image_id, signature, vote_value } = req.body;
+
+  if (!user_wallet || !image_id || !signature) {
+    return res.status(400).json({ error: "Faltan campos obligatorios" });
+  }
 
   try {
+    const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
+    const pubKey = new PublicKey(user_wallet);
+    const message = `Votar por la imagen: ${image_id}`;
+    const encodedMessage = new TextEncoder().encode(message);
+    const signatureBuffer = bs58.decode(signature);
+
+    // Verifica la firma
+    const isValid = await PublicKey.verify(encodedMessage, signatureBuffer, pubKey.toBytes());
+    if (!isValid) {
+      return res.status(401).json({ error: "Firma inválida" });
+    }
+
+    // Verifica que tenga tokens
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubKey, {
+      programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+    });
+
+    const hasTokens = tokenAccounts.value.some(({ account }) => {
+      const info = account.data.parsed.info;
+      return (
+        info.mint === MINT_ADDRESS &&
+        parseFloat(info.tokenAmount.uiAmount) >= MIN_TOKENS_REQUIRED
+      );
+    });
+
+    if (!hasTokens) {
+      return res.status(403).json({ error: "No tienes suficientes tokens para votar" });
+    }
+
+    // Guardar voto
     const result = await pool.query(
       `INSERT INTO "Votos" (user_wallet, image_id, vote_value)
        VALUES ($1, $2, $3) RETURNING *`,
       [user_wallet, image_id, vote_value || 1]
     );
 
-    res.status(200).json({ message: "Voto guardado", vote: result.rows[0] });
-  } catch (error) {
-    console.error("❌ Error al guardar voto:", error);
-    res.status(500).json({ error: "Error al guardar el voto" });
+    res.status(200).json({ message: "✅ Voto guardado", vote: result.rows[0] });
+
+  } catch (err) {
+    console.error("❌ Error procesando voto:", err);
+    res.status(500).json({ error: "Error al procesar el voto" });
   }
 });
+
 
 
 // INICIAR SERVIDOR
