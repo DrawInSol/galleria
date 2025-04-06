@@ -84,6 +84,33 @@ app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
 });
 
+const { Pool } = require('pg');
+
+// Conexión a PostgreSQL desde Railway
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+// Ruta para guardar un voto
+app.post("/vote", async (req, res) => {
+  const { user_wallet, image_id, vote_value } = req.body;
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO "Votos" (user_wallet, image_id, vote_value)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [user_wallet, image_id, vote_value || 1]
+    );
+
+    res.status(200).json({ message: "Voto guardado", vote: result.rows[0] });
+  } catch (error) {
+    console.error("❌ Error al guardar voto:", error);
+    res.status(500).json({ error: "Error al guardar el voto" });
+  }
+});
+
+
 // INICIAR SERVIDOR
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
