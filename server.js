@@ -108,7 +108,7 @@ app.post("/vote", async (req, res) => {
   }
 
   try {
-    const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
+   const connection = new Connection(clusterApiUrl("devnet"), "confirmed");   //red de prueba, cambiar luego a const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
     const pubKey = new PublicKey(user_wallet);
     const message = `Votar por la imagen: ${image_id}`;
     const encodedMessage = new TextEncoder().encode(message);
