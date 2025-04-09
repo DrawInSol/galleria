@@ -152,7 +152,52 @@ app.post("/vote", async (req, res) => {
   }
 });
 
+const nacl = require("tweetnacl");
 
+// Endpoint para verificar si la wallet es holder
+app.post("/api/verify-holder", async (req, res) => {
+  const { wallet, message, signature } = req.body;
+
+  if (!wallet || !message || !signature) {
+    return res.status(400).json({ error: "Faltan campos obligatorios" });
+  }
+
+  try {
+    const pubkey = new PublicKey(wallet);
+    const decodedSignature = bs58.decode(signature); // Decodificamos la firma de base58
+
+    // Verificar la firma
+    const isValid = nacl.sign.detached.verify(
+      new TextEncoder().encode(message),
+      decodedSignature,
+      pubkey.toBytes()
+    );
+
+    if (!isValid) {
+      return res.status(401).json({ isHolder: false, error: "Firma inválida" });
+    }
+
+    // Verificar balance de tokens
+    const connection = new Connection(clusterApiUrl("devnet"), "confirmed"); // Cambia a "mainnet-beta" cuando estés listo
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubkey, {
+      mint: new PublicKey(MINT_ADDRESS),
+    });
+
+    let isHolder = false;
+    for (const { account } of tokenAccounts.value) {
+      const amount = account.data.parsed.info.tokenAmount.uiAmount;
+      if (amount >= MIN_TOKENS_REQUIRED) {
+        isHolder = true;
+        break;
+      }
+    }
+
+    res.json({ isHolder });
+  } catch (error) {
+    console.error("Error en verificación:", error);
+    res.status(500).json({ isHolder: false, error: error.message });
+  }
+});
 
 // INICIAR SERVIDOR
 const PORT = process.env.PORT || 3000;
