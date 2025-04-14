@@ -91,9 +91,11 @@ app.get("/gallery", async (req, res) => {
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
     // Depurar los metadatos de Cloudinary
+    console.log("Recursos completos de Cloudinary:", resources);
     console.log("Metadatos de Cloudinary:", resources.map(img => ({
       url: img.secure_url,
-      context: img.context
+      context: img.context,
+      tags: img.tags
     })));
 
     const images = resources.map((img) => {
@@ -110,13 +112,13 @@ app.get("/gallery", async (req, res) => {
       };
     });
 
+    console.log("Datos enviados al frontend:", images);
     res.json(images);
   } catch (error) {
     console.error("❌ Error al obtener galería:", error);
     res.status(500).json({ error: "Error al obtener la galería" });
   }
 });
-
 // TEST
 app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
