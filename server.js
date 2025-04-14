@@ -86,9 +86,9 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
-    // Obtener los conteos de votos desde la base de datos
-    const votesResult = await pool.query("SELECT image_id, vote_value FROM votos");
-    const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_value]));
+    // Obtener los conteos de votos desde la vista votos_count
+    const votesResult = await pool.query("SELECT image_id, vote_count FROM votos_count");
+    const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
     // Depurar los metadatos de Cloudinary
     console.log("Metadatos de Cloudinary:", resources.map(img => ({
@@ -96,14 +96,19 @@ app.get("/gallery", async (req, res) => {
       context: img.context
     })));
 
-    const images = resources.map((img) => ({
-      url: img.secure_url,
-      category: img.tags?.[0] || "Uncategorized",
-      created_at: img.created_at,
-      artName: img.context?.custom?.caption || "Untitled",
-      wallet: img.context?.custom?.wallet || "Unknown",
-      votes: votesMap.get(img.secure_url) || 0
-    }));
+    const images = resources.map((img) => {
+      const caption = img.context?.custom?.caption || img.context?.custom_caption || "Untitled";
+      const wallet = img.context?.custom?.wallet || img.context?.custom_wallet || "Unknown";
+
+      return {
+        url: img.secure_url,
+        category: img.tags?.[0] || "Uncategorized",
+        created_at: img.created_at,
+        artName: caption,
+        wallet: wallet,
+        votes: votesMap.get(img.secure_url) || 0
+      };
+    });
 
     res.json(images);
   } catch (error) {
@@ -111,6 +116,7 @@ app.get("/gallery", async (req, res) => {
     res.status(500).json({ error: "Error al obtener la galería" });
   }
 });
+
 // TEST
 app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
@@ -150,21 +156,34 @@ app.post("/vote", async (req, res) => {
       return res.status(401).json({ error: "Firma inválida" });
     }
 
-    // Insertar o actualizar el voto usando UPSERT
-    console.log("Registrando o actualizando voto en la base de datos...");
+    // Verificar si el usuario ya ha votado por esta imagen
+    const existingVote = await pool.query(
+      `SELECT * FROM votos WHERE user_wallet = $1 AND image_id = $2`,
+      [user_wallet, image_id]
+    );
+
+    if (existingVote.rows.length > 0) {
+      console.log("El usuario ya ha votado por esta imagen:", { user_wallet, image_id });
+      return res.status(403).json({ error: "Ya has votado por esta imagen" });
+    }
+
+    // Registrar el voto
+    console.log("Registrando voto en la base de datos...");
     const result = await pool.query(
-      `INSERT INTO votos (image_id, vote_value)
-       VALUES ($1, 1)
-       ON CONFLICT (image_id)
-       DO UPDATE SET vote_value = votos.vote_value + 1
+      `INSERT INTO votos (user_wallet, image_id, created_at)
+       VALUES ($1, $2, NOW())
        RETURNING *`,
-      [image_id]
+      [user_wallet, image_id]
     );
 
     console.log("Voto registrado con éxito:", result.rows[0]);
     res.status(200).json({ message: "✅ Voto registrado", vote: result.rows[0] });
   } catch (err) {
     console.error("❌ Error procesando voto:", err);
+    // Manejar el error de unicidad (si la restricción UNIQUE falla)
+    if (err.code === '23505') { // Código de error de PostgreSQL para violación de unicidad
+      return res.status(403).json({ error: "Ya has votado por esta imagen" });
+    }
     res.status(500).json({ error: `Error al procesar el voto: ${err.message}` });
   }
 });
