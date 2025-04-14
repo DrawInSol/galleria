@@ -86,19 +86,35 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
+    // Obtener los metadatos de cada imagen individualmente
+    const detailedResources = await Promise.all(
+      resources.map(async (img) => {
+        try {
+          const resource = await cloudinary.api.resource(img.public_id, {
+            resource_type: "image",
+            context: true
+          });
+          return resource;
+        } catch (error) {
+          console.error(`Error al obtener metadatos para ${img.public_id}:`, error);
+          return img; // Devolver el recurso original si falla
+        }
+      })
+    );
+
     // Obtener los conteos de votos desde la vista votos_count
     const votesResult = await pool.query("SELECT image_id, vote_count FROM votos_count");
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
     // Depurar los metadatos de Cloudinary
-    console.log("Recursos completos de Cloudinary:", resources);
-    console.log("Metadatos de Cloudinary:", resources.map(img => ({
+    console.log("Recursos completos de Cloudinary:", detailedResources);
+    console.log("Metadatos de Cloudinary (detallados):", detailedResources.map(img => ({
       url: img.secure_url,
       context: img.context,
       tags: img.tags
     })));
 
-    const images = resources.map((img) => {
+    const images = detailedResources.map((img) => {
       const caption = img.context?.custom?.caption || img.context?.custom_caption || "Untitled";
       const wallet = img.context?.custom?.wallet || img.context?.custom_wallet || "Unknown";
 
@@ -119,6 +135,7 @@ app.get("/gallery", async (req, res) => {
     res.status(500).json({ error: "Error al obtener la galería" });
   }
 });
+
 // TEST
 app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
