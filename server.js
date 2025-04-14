@@ -130,7 +130,7 @@ app.post("/vote", async (req, res) => {
     const pubKey = new PublicKey(user_wallet);
     console.log("Decodificando firma...");
     const signatureBuffer = bs58.decode(signature);
-    const encodedMessage = new TextEncoder().encode(message);
+    const encodedMessage = new TextEncoder().encode(message); // Usar el mensaje enviado desde el frontend
 
     console.log("Verificando firma...");
     const isValid = nacl.sign.detached.verify(
@@ -158,7 +158,6 @@ app.post("/vote", async (req, res) => {
     res.status(500).json({ error: `Error al procesar el voto: ${err.message}` });
   }
 });
-
 // Endpoint para verificar si la wallet es holder
 app.post("/api/verify-holder", async (req, res) => {
   const { wallet, message, signature } = req.body;
