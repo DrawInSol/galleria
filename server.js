@@ -90,13 +90,19 @@ app.get("/gallery", async (req, res) => {
     const votesResult = await pool.query("SELECT image_id, vote_value FROM votos");
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_value]));
 
+    // Depurar los metadatos de Cloudinary
+    console.log("Metadatos de Cloudinary:", resources.map(img => ({
+      url: img.secure_url,
+      context: img.context
+    })));
+
     const images = resources.map((img) => ({
       url: img.secure_url,
       category: img.tags?.[0] || "Uncategorized",
       created_at: img.created_at,
       artName: img.context?.custom?.caption || "Untitled",
       wallet: img.context?.custom?.wallet || "Unknown",
-      votes: votesMap.get(img.secure_url) || 0 // Añadir el conteo de votos
+      votes: votesMap.get(img.secure_url) || 0
     }));
 
     res.json(images);
@@ -105,7 +111,6 @@ app.get("/gallery", async (req, res) => {
     res.status(500).json({ error: "Error al obtener la galería" });
   }
 });
-
 // TEST
 app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
