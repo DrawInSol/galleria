@@ -19,8 +19,7 @@ const { Pool } = require('pg');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  family: 4 // Forzar IPv4
+  ssl: { rejectUnauthorized: false }
 });
 
 // Verificar conexión a la base de datos
@@ -87,12 +86,17 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
+    // Obtener los conteos de votos desde la base de datos
+    const votesResult = await pool.query("SELECT image_id, vote_value FROM votos");
+    const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_value]));
+
     const images = resources.map((img) => ({
       url: img.secure_url,
       category: img.tags?.[0] || "Uncategorized",
       created_at: img.created_at,
       artName: img.context?.custom?.caption || "Untitled",
-      wallet: img.context?.custom?.wallet || "Unknown"
+      wallet: img.context?.custom?.wallet || "Unknown",
+      votes: votesMap.get(img.secure_url) || 0 // Añadir el conteo de votos
     }));
 
     res.json(images);
@@ -108,18 +112,14 @@ app.get("/", (req, res) => {
 });
 
 // Ruta para guardar un voto
-const { Connection, PublicKey, clusterApiUrl } = require('@solana/web3.js');
+const { PublicKey } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const nacl = require("tweetnacl");
 
-// CONFIGURA TU TOKEN
-const MINT_ADDRESS = "TU_MINT_ADDRESS";
-const MIN_TOKENS_REQUIRED = 10;
-
 app.post("/vote", async (req, res) => {
-  const { user_wallet, image_id, signature, vote_value, message } = req.body;
+  const { user_wallet, image_id, signature, message } = req.body;
 
-  console.log("Solicitud recibida:", { user_wallet, image_id, signature, vote_value, message });
+  console.log("Solicitud recibida:", { user_wallet, image_id, signature, message });
 
   if (!user_wallet || !image_id || !signature || !message) {
     console.log("Faltan campos obligatorios:", { user_wallet, image_id, signature, message });
@@ -127,11 +127,11 @@ app.post("/vote", async (req, res) => {
   }
 
   try {
-    const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+    // Verificar la firma
     const pubKey = new PublicKey(user_wallet);
     console.log("Decodificando firma...");
     const signatureBuffer = bs58.decode(signature);
-    const encodedMessage = new TextEncoder().encode(message); // Usar el mensaje enviado desde el frontend
+    const encodedMessage = new TextEncoder().encode(message);
 
     console.log("Verificando firma...");
     const isValid = nacl.sign.detached.verify(
@@ -145,60 +145,22 @@ app.post("/vote", async (req, res) => {
       return res.status(401).json({ error: "Firma inválida" });
     }
 
-    console.log("Guardando voto en la base de datos...");
+    // Insertar o actualizar el voto usando UPSERT
+    console.log("Registrando o actualizando voto en la base de datos...");
     const result = await pool.query(
-      `INSERT INTO votos (user_wallet, image_id, vote_value, created_at)
-       VALUES ($1, $2, $3, NOW()) RETURNING *`,
-      [user_wallet, image_id, vote_value || 1]
+      `INSERT INTO votos (image_id, vote_value)
+       VALUES ($1, 1)
+       ON CONFLICT (image_id)
+       DO UPDATE SET vote_value = votos.vote_value + 1
+       RETURNING *`,
+      [image_id]
     );
 
-    console.log("Voto guardado con éxito:", result.rows[0]);
-    res.status(200).json({ message: "✅ Voto guardado", vote: result.rows[0] });
+    console.log("Voto registrado con éxito:", result.rows[0]);
+    res.status(200).json({ message: "✅ Voto registrado", vote: result.rows[0] });
   } catch (err) {
     console.error("❌ Error procesando voto:", err);
     res.status(500).json({ error: `Error al procesar el voto: ${err.message}` });
-  }
-});
-// Endpoint para verificar si la wallet es holder
-app.post("/api/verify-holder", async (req, res) => {
-  const { wallet, message, signature } = req.body;
-
-  if (!wallet || !message || !signature) {
-    return res.status(400).json({ error: "Faltan campos obligatorios" });
-  }
-
-  try {
-    const pubkey = new PublicKey(wallet);
-    const decodedSignature = bs58.decode(signature);
-
-    const isValid = nacl.sign.detached.verify(
-      new TextEncoder().encode(message),
-      decodedSignature,
-      pubkey.toBytes()
-    );
-
-    if (!isValid) {
-      return res.status(401).json({ isHolder: false, error: "Firma inválida" });
-    }
-
-    const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
-    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubkey, {
-      mint: new PublicKey(MINT_ADDRESS),
-    });
-
-    let isHolder = false;
-    for (const { account } of tokenAccounts.value) {
-      const amount = account.data.parsed.info.tokenAmount.uiAmount;
-      if (amount >= MIN_TOKENS_REQUIRED) {
-        isHolder = true;
-        break;
-      }
-    }
-
-    res.json({ isHolder });
-  } catch (error) {
-    console.error("Error en verificación:", error);
-    res.status(500).json({ isHolder: false, error: error.message });
   }
 });
 
