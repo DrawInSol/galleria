@@ -66,6 +66,7 @@ app.get("/gallery", async (req, res) => {
   try {
     let resources;
 
+    // Obtener imágenes de Cloudinary
     if (category && category !== "all") {
       const result = await cloudinary.api.resources_by_tag(category, {
         resource_type: "image",
@@ -86,41 +87,22 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
-    // Obtener los metadatos de cada imagen individualmente
-    const detailedResources = await Promise.all(
-      resources.map(async (img) => {
-        try {
-          const resource = await cloudinary.api.resource(img.public_id, {
-            resource_type: "image",
-            context: true
-          });
-          return resource;
-        } catch (error) {
-          console.error(`Error al obtener metadatos para ${img.public_id}:`, error);
-          return img; // Devolver el recurso original si falla
-        }
-      })
-    );
-
     // Obtener los conteos de votos desde la vista votos_count
     const votesResult = await pool.query("SELECT image_id, vote_count FROM votos_count");
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
-    // Depurar los metadatos de Cloudinary
-    console.log("Recursos completos de Cloudinary:", detailedResources);
-    console.log("Metadatos de Cloudinary (detallados):", detailedResources.map(img => ({
-      url: img.secure_url,
-      context: img.context,
-      tags: img.tags
-    })));
+    // Depurar la respuesta completa de Cloudinary
+    console.log("Respuesta completa de Cloudinary:", JSON.stringify(resources, null, 2));
 
-    const images = detailedResources.map((img) => {
-      const caption = img.context?.custom?.caption || img.context?.custom_caption || "Untitled";
-      const wallet = img.context?.custom?.wallet || img.context?.custom_wallet || "Unknown";
+    // Mapear los recursos a los datos que necesita el frontend
+    const images = resources.map((img) => {
+      const caption = img.context?.custom?.caption || "Untitled";
+      const wallet = img.context?.custom?.wallet || "Unknown";
+      const tag = img.tags?.[0] || "Uncategorized";
 
       return {
         url: img.secure_url,
-        category: img.tags?.[0] || "Uncategorized",
+        category: tag,
         created_at: img.created_at,
         artName: caption,
         wallet: wallet,
