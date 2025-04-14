@@ -108,39 +108,27 @@ app.post("/vote", async (req, res) => {
   }
 
   try {
-   const connection = new Connection(clusterApiUrl("devnet"), "confirmed");   //red de prueba, cambiar luego a const connection = new Connection(clusterApiUrl("mainnet-beta"), "confirmed");
+    const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
     const pubKey = new PublicKey(user_wallet);
     const message = `Votar por la imagen: ${image_id}`;
     const encodedMessage = new TextEncoder().encode(message);
     const signatureBuffer = bs58.decode(signature);
 
     // Verifica la firma
-    const isValid = await PublicKey.verify(encodedMessage, signatureBuffer, pubKey.toBytes());
+    const isValid = nacl.sign.detached.verify(
+      encodedMessage,
+      signatureBuffer,
+      pubKey.toBytes()
+    );
+
     if (!isValid) {
       return res.status(401).json({ error: "Firma inválida" });
     }
 
-    // Verifica que tenga tokens
-    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubKey, {
-      programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
-    });
-
-    const hasTokens = tokenAccounts.value.some(({ account }) => {
-      const info = account.data.parsed.info;
-      return (
-        info.mint === MINT_ADDRESS &&
-        parseFloat(info.tokenAmount.uiAmount) >= MIN_TOKENS_REQUIRED
-      );
-    });
-
-    if (!hasTokens) {
-      return res.status(403).json({ error: "No tienes suficientes tokens para votar" });
-    }
-
-    // Guardar voto
+    // Guardar voto directamente sin verificar tokens
     const result = await pool.query(
-      `INSERT INTO "Votos" (user_wallet, image_id, vote_value)
-       VALUES ($1, $2, $3) RETURNING *`,
+      `INSERT INTO votos (user_wallet, image_id, vote_value, created_at)
+       VALUES ($1, $2, $3, NOW()) RETURNING *`,
       [user_wallet, image_id, vote_value || 1]
     );
 
