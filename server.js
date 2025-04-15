@@ -123,6 +123,24 @@ app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
 });
 
+
+app.get("/test-metadata/:publicId", async (req, res) => {
+  const { publicId } = req.params;
+
+  try {
+    const result = await cloudinary.api.resource(publicId, {
+      resource_type: "image",
+      context: true
+    });
+
+    console.log("Resultado de los metadatos de una imagen:", JSON.stringify(result, null, 2));
+    res.json(result);
+  } catch (error) {
+    console.error("❌ Error al obtener metadatos:", error);
+    res.status(500).json({ error: "Error al obtener metadatos" });
+  }
+});
+
 // Ruta para guardar un voto
 const { PublicKey } = require('@solana/web3.js');
 const bs58 = require('bs58');
