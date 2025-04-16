@@ -55,9 +55,8 @@ app.post("/upload", async (req, res) => {
       public_id: `${artName}_${Date.now()}`,
       resource_type: "image",
       context: {
-        "custom.caption": artName,
-        "custom.wallet": wallet
-        // No incluimos custom.category porque mencionaste que no lo necesitas
+        caption: artName, // Guardar el nombre como caption (para el campo "Title")
+        wallet: wallet   // Guardar la wallet como wallet (sin custom.)
       }
     });
 
@@ -99,9 +98,9 @@ app.get("/gallery", async (req, res) => {
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
     const images = resources.map((img) => {
-      const caption = img.context?.custom?.["caption"] || "Sin título";
-      const wallet = img.context?.custom?.["wallet"] || "Desconocido";
-      const category = img.tags?.[0] || "Sin categoría"; // Usamos los tags para la categoría
+      const caption = img.context?.caption || "Sin título"; // Leer caption directamente
+      const wallet = img.context?.wallet || "Desconocido"; // Leer wallet directamente
+      const category = img.tags?.[0] || "Sin categoría";   // Categoría desde tags
 
       return {
         url: img.secure_url,
