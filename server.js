@@ -47,9 +47,17 @@ app.post("/upload", async (req, res) => {
       public_id: `${artName}_${Date.now()}`,
       resource_type: "image",
       context: {
-        "custom.caption": artName,
-        "custom.wallet": wallet
+        "caption": artName, // Cambiado de custom.caption a caption
+        "wallet": wallet,   // Cambiado de custom.wallet a wallet
+        "category": category
       }
+    });
+
+    console.log("✅ Imagen subida a Cloudinary:", {
+      url: result.secure_url,
+      artName,
+      wallet,
+      category
     });
 
     res.json({ url: result.secure_url });
@@ -87,22 +95,23 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
+    // Depurar la respuesta completa de Cloudinary
+    console.log("📸 Respuesta completa de Cloudinary:", JSON.stringify(resources, null, 2));
+
     // Obtener los conteos de votos desde la vista votos_count
     const votesResult = await pool.query("SELECT image_id, vote_count FROM votos_count");
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
-    // Depurar la respuesta completa de Cloudinary
-    console.log("Respuesta completa de Cloudinary:", JSON.stringify(resources, null, 2));
-
     // Mapear los recursos a los datos que necesita el frontend
     const images = resources.map((img) => {
-      const caption = img.context?.custom?.caption || "Untitled";
-      const wallet = img.context?.custom?.wallet || "Unknown";
-      const tag = img.tags?.[0] || "Uncategorized";
+      // Acceder al context directamente (eliminando el prefijo "custom.")
+      const caption = img.context?.caption || "Sin título";
+      const wallet = img.context?.wallet || "Desconocido";
+      const category = img.context?.category || img.tags?.[0] || "Sin categoría";
 
       return {
         url: img.secure_url,
-        category: tag,
+        category: category,
         created_at: img.created_at,
         artName: caption,
         wallet: wallet,
@@ -110,7 +119,7 @@ app.get("/gallery", async (req, res) => {
       };
     });
 
-    console.log("Datos enviados al frontend:", images);
+    console.log("✅ Datos enviados al frontend:", images);
     res.json(images);
   } catch (error) {
     console.error("❌ Error al obtener galería:", error);
@@ -123,7 +132,7 @@ app.get("/", (req, res) => {
   res.send("🚀 API funcionando correctamente");
 });
 
-
+// OBTENER METADATOS DE UNA IMAGEN ESPECÍFICA
 app.get("/test-metadata/:publicId", async (req, res) => {
   const { publicId } = req.params;
 
@@ -133,7 +142,7 @@ app.get("/test-metadata/:publicId", async (req, res) => {
       context: true
     });
 
-    console.log("Resultado de los metadatos de una imagen:", JSON.stringify(result, null, 2));
+    console.log("✅ Metadatos de la imagen:", JSON.stringify(result, null, 2));
     res.json(result);
   } catch (error) {
     console.error("❌ Error al obtener metadatos:", error);
@@ -141,7 +150,7 @@ app.get("/test-metadata/:publicId", async (req, res) => {
   }
 });
 
-// Ruta para guardar un voto
+// RUTA PARA VOTAR
 const { PublicKey } = require('@solana/web3.js');
 const bs58 = require('bs58');
 const nacl = require("tweetnacl");
@@ -149,7 +158,7 @@ const nacl = require("tweetnacl");
 app.post("/vote", async (req, res) => {
   const { user_wallet, image_id, signature, message } = req.body;
 
-  console.log("Solicitud recibida:", { user_wallet, image_id, signature, message });
+  console.log("Solicitud de voto recibida:", { user_wallet, image_id, signature, message });
 
   if (!user_wallet || !image_id || !signature || !message) {
     console.log("Faltan campos obligatorios:", { user_wallet, image_id, signature, message });
@@ -159,11 +168,9 @@ app.post("/vote", async (req, res) => {
   try {
     // Verificar la firma
     const pubKey = new PublicKey(user_wallet);
-    console.log("Decodificando firma...");
     const signatureBuffer = bs58.decode(signature);
     const encodedMessage = new TextEncoder().encode(message);
 
-    console.log("Verificando firma...");
     const isValid = nacl.sign.detached.verify(
       encodedMessage,
       signatureBuffer,
@@ -195,12 +202,11 @@ app.post("/vote", async (req, res) => {
       [user_wallet, image_id]
     );
 
-    console.log("Voto registrado con éxito:", result.rows[0]);
+    console.log("✅ Voto registrado con éxito:", result.rows[0]);
     res.status(200).json({ message: "✅ Voto registrado", vote: result.rows[0] });
   } catch (err) {
     console.error("❌ Error procesando voto:", err);
-    // Manejar el error de unicidad (si la restricción UNIQUE falla)
-    if (err.code === '23505') { // Código de error de PostgreSQL para violación de unicidad
+    if (err.code === '23505') {
       return res.status(403).json({ error: "Ya has votado por esta imagen" });
     }
     res.status(500).json({ error: `Error al procesar el voto: ${err.message}` });
