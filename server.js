@@ -47,18 +47,14 @@ app.post("/upload", async (req, res) => {
       public_id: `${artName}_${Date.now()}`,
       resource_type: "image",
       context: {
-        "caption": artName,
-        "wallet": wallet,
-        "category": category
+        caption: artName,
+        wallet: wallet,
+        category: category
       }
     });
 
-    console.log("✅ Imagen subida a Cloudinary:", {
-      url: result.secure_url,
-      artName,
-      wallet,
-      category
-    });
+    // Log temporal para depurar la respuesta de Cloudinary
+    console.log("✅ Respuesta de Cloudinary al subir imagen:", JSON.stringify(result, null, 2));
 
     res.json({ url: result.secure_url });
   } catch (error) {
@@ -95,7 +91,7 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
-    // Depurar la respuesta completa de Cloudinary
+    // Log temporal para depurar (lo eliminaremos después)
     console.log("📸 Respuesta completa de Cloudinary:", JSON.stringify(resources, null, 2));
 
     // Obtener los conteos de votos desde la vista votos_count
@@ -104,7 +100,6 @@ app.get("/gallery", async (req, res) => {
 
     // Mapear los recursos a los datos que necesita el frontend
     const images = resources.map((img) => {
-      // Acceder a los metadatos, manejando ambas estructuras (con y sin prefijo "custom.")
       const caption = img.context?.caption || img.context?.custom?.["custom.caption"] || "Sin título";
       const wallet = img.context?.wallet || img.context?.custom?.["custom.wallet"] || "Desconocido";
       const category = img.context?.category || img.context?.custom?.["custom.category"] || img.tags?.[0] || "Sin categoría";
@@ -119,6 +114,7 @@ app.get("/gallery", async (req, res) => {
       };
     });
 
+    // Log temporal para depurar (lo eliminaremos después)
     console.log("✅ Datos enviados al frontend:", images);
     res.json(images);
   } catch (error) {
@@ -142,6 +138,7 @@ app.get("/test-metadata/:publicId", async (req, res) => {
       context: true
     });
 
+    // Log temporal para depurar (lo eliminaremos después)
     console.log("✅ Metadatos de la imagen:", JSON.stringify(result, null, 2));
     res.json(result);
   } catch (error) {
