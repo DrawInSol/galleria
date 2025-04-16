@@ -8,11 +8,17 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
 // Configurar Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+try {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+  console.log("✅ Cloudinary configurado correctamente");
+} catch (error) {
+  console.error("❌ Error al configurar Cloudinary:", error);
+  process.exit(1);
+}
 
 // Conexión a PostgreSQL (Supabase)
 const { Pool } = require('pg');
@@ -23,14 +29,16 @@ const pool = new Pool({
 });
 
 // Verificar conexión a la base de datos
-pool.connect((err, client, release) => {
-  if (err) {
+async function connectToDatabase() {
+  try {
+    const client = await pool.connect();
+    console.log("✅ Conectado a la base de datos de Supabase");
+    client.release();
+  } catch (err) {
     console.error("❌ Error conectando a la base de datos:", err.stack);
-    return;
+    process.exit(1);
   }
-  console.log("✅ Conectado a la base de datos de Supabase");
-  release();
-});
+}
 
 // SUBIR IMAGEN
 app.post("/upload", async (req, res) => {
@@ -42,16 +50,12 @@ app.post("/upload", async (req, res) => {
 
   try {
     const result = await cloudinary.uploader.upload(image, {
-      upload_preset: "drawsol_preset", // Usar el preset que creaste
       folder: "drawsol_gallery",
       tags: [category],
       public_id: `${artName}_${Date.now()}`,
-      resource_type: "image",
-      context: `caption=${artName}|wallet=${wallet}|category=${category}` // Formato de cadena para el context
+      resource_type: "image"
+      // No se incluye context; los metadatos se agregarán manualmente en Cloudinary
     });
-
-    // Log temporal para depurar
-    console.log("✅ Respuesta de Cloudinary al subir imagen:", JSON.stringify(result, null, 2));
 
     res.json({ url: result.secure_url });
   } catch (error) {
@@ -87,16 +91,13 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
-    // Log temporal para depurar
-    console.log("📸 Respuesta completa de Cloudinary:", JSON.stringify(resources, null, 2));
-
     const votesResult = await pool.query("SELECT image_id, vote_count FROM votos_count");
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
     const images = resources.map((img) => {
-      const caption = img.context?.caption || img.context?.custom?.["custom.caption"] || "Sin título";
-      const wallet = img.context?.wallet || img.context?.custom?.["custom.wallet"] || "Desconocido";
-      const category = img.context?.category || img.context?.custom?.["custom.category"] || img.tags?.[0] || "Sin categoría";
+      const caption = img.context?.custom?.["caption"] || "Sin título";
+      const wallet = img.context?.custom?.["wallet"] || "Desconocido";
+      const category = img.context?.custom?.["category"] || img.tags?.[0] || "Sin categoría";
 
       return {
         url: img.secure_url,
@@ -108,8 +109,6 @@ app.get("/gallery", async (req, res) => {
       };
     });
 
-    // Log temporal para depurar
-    console.log("✅ Datos enviados al frontend:", images);
     res.json(images);
   } catch (error) {
     console.error("❌ Error al obtener galería:", error);
@@ -131,53 +130,10 @@ app.get("/test-metadata/:publicId", async (req, res) => {
       resource_type: "image",
       context: true
     });
-
-    // Log temporal para depurar
-    console.log("✅ Metadatos de la imagen:", JSON.stringify(result, null, 2));
     res.json(result);
   } catch (error) {
     console.error("❌ Error al obtener metadatos:", error);
     res.status(500).json({ error: "Error al obtener metadatos" });
-  }
-});
-
-// RUTA PARA ACTUALIZAR METADATOS DE IMÁGENES EXISTENTES
-app.post("/update-metadata", async (req, res) => {
-  try {
-    const result = await cloudinary.api.resources({
-      type: "upload",
-      prefix: "drawsol_gallery",
-      resource_type: "image",
-      max_results: 100,
-      tags: true,
-      context: true
-    });
-
-    const resources = result.resources;
-
-    for (const img of resources) {
-      const publicId = img.public_id;
-      // Usar valores predeterminados si no hay metadatos
-      const currentCaption = img.context?.caption || img.context?.custom?.["custom.caption"] || img.public_id.split('/').pop().split('_')[0] || "Sin título";
-      const currentWallet = img.context?.wallet || img.context?.custom?.["custom.wallet"] || "Desconocido";
-      const currentCategory = img.context?.category || img.context?.custom?.["custom.category"] || img.tags?.[0] || "Sin categoría";
-
-      await cloudinary.uploader.explicit(publicId, {
-        type: "upload",
-        resource_type: "image",
-        context: {
-          caption: currentCaption,
-          wallet: currentWallet,
-          category: currentCategory
-        }
-      });
-      console.log(`✅ Metadatos actualizados para ${publicId}`);
-    }
-
-    res.json({ message: "✅ Metadatos actualizados para todas las imágenes" });
-  } catch (error) {
-    console.error("❌ Error al actualizar metadatos:", error);
-    res.status(500).json({ error: "Error al actualizar metadatos" });
   }
 });
 
@@ -236,6 +192,7 @@ app.post("/vote", async (req, res) => {
 
 // INICIAR SERVIDOR
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+  await connectToDatabase();
 });
