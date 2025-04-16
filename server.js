@@ -47,8 +47,8 @@ app.post("/upload", async (req, res) => {
       public_id: `${artName}_${Date.now()}`,
       resource_type: "image",
       context: {
-        "caption": artName, // Cambiado de custom.caption a caption
-        "wallet": wallet,   // Cambiado de custom.wallet a wallet
+        "caption": artName,
+        "wallet": wallet,
         "category": category
       }
     });
@@ -104,10 +104,10 @@ app.get("/gallery", async (req, res) => {
 
     // Mapear los recursos a los datos que necesita el frontend
     const images = resources.map((img) => {
-      // Acceder al context directamente (eliminando el prefijo "custom.")
-      const caption = img.context?.caption || "Sin título";
-      const wallet = img.context?.wallet || "Desconocido";
-      const category = img.context?.category || img.tags?.[0] || "Sin categoría";
+      // Acceder a los metadatos, manejando ambas estructuras (con y sin prefijo "custom.")
+      const caption = img.context?.caption || img.context?.custom?.["custom.caption"] || "Sin título";
+      const wallet = img.context?.wallet || img.context?.custom?.["custom.wallet"] || "Desconocido";
+      const category = img.context?.category || img.context?.custom?.["custom.category"] || img.tags?.[0] || "Sin categoría";
 
       return {
         url: img.secure_url,
@@ -147,6 +147,48 @@ app.get("/test-metadata/:publicId", async (req, res) => {
   } catch (error) {
     console.error("❌ Error al obtener metadatos:", error);
     res.status(500).json({ error: "Error al obtener metadatos" });
+  }
+});
+
+// RUTA PARA ACTUALIZAR METADATOS DE IMÁGENES EXISTENTES
+app.post("/update-metadata", async (req, res) => {
+  try {
+    // Obtener todas las imágenes de la carpeta drawsol_gallery
+    const result = await cloudinary.api.resources({
+      type: "upload",
+      prefix: "drawsol_gallery",
+      resource_type: "image",
+      max_results: 100,
+      tags: true,
+      context: true
+    });
+
+    const resources = result.resources;
+
+    // Iterar sobre cada imagen y actualizar sus metadatos
+    for (const img of resources) {
+      const publicId = img.public_id;
+      const currentCaption = img.context?.caption || img.context?.custom?.["custom.caption"] || "Sin título";
+      const currentWallet = img.context?.wallet || img.context?.custom?.["custom.wallet"] || "Desconocido";
+      const currentCategory = img.context?.category || img.context?.custom?.["custom.category"] || img.tags?.[0] || "Sin categoría";
+
+      // Actualizar los metadatos con las nuevas claves (sin prefijo "custom.")
+      await cloudinary.uploader.explicit(publicId, {
+        type: "upload",
+        resource_type: "image",
+        context: {
+          caption: currentCaption,
+          wallet: currentWallet,
+          category: currentCategory
+        }
+      });
+      console.log(`✅ Metadatos actualizados para ${publicId}`);
+    }
+
+    res.json({ message: "✅ Metadatos actualizados para todas las imágenes" });
+  } catch (error) {
+    console.error("❌ Error al actualizar metadatos:", error);
+    res.status(500).json({ error: "Error al actualizar metadatos" });
   }
 });
 
