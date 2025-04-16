@@ -98,9 +98,9 @@ app.get("/gallery", async (req, res) => {
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
     const images = resources.map((img) => {
-      const caption = img.context?.caption || "Sin título"; // Leer caption directamente
-      const wallet = img.context?.wallet || "Desconocido"; // Leer wallet directamente
-      const category = img.tags?.[0] || "Sin categoría";   // Categoría desde tags
+      const caption = img.context?.custom?.["caption"] || "Sin título";
+      const wallet = img.context?.custom?.["wallet"] || "Desconocido";
+      const category = img.tags?.[0] || "Sin categoría";
 
       return {
         url: img.secure_url,
