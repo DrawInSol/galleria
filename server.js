@@ -53,8 +53,12 @@ app.post("/upload", async (req, res) => {
       folder: "drawsol_gallery",
       tags: [category],
       public_id: `${artName}_${Date.now()}`,
-      resource_type: "image"
-      // No se incluye context; los metadatos se agregarán manualmente en Cloudinary
+      resource_type: "image",
+      context: {
+        "custom.caption": artName,
+        "custom.wallet": wallet
+        // No incluimos custom.category porque mencionaste que no lo necesitas
+      }
     });
 
     res.json({ url: result.secure_url });
@@ -97,7 +101,7 @@ app.get("/gallery", async (req, res) => {
     const images = resources.map((img) => {
       const caption = img.context?.custom?.["caption"] || "Sin título";
       const wallet = img.context?.custom?.["wallet"] || "Desconocido";
-      const category = img.context?.custom?.["category"] || img.tags?.[0] || "Sin categoría";
+      const category = img.tags?.[0] || "Sin categoría"; // Usamos los tags para la categoría
 
       return {
         url: img.secure_url,
