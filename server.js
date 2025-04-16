@@ -42,18 +42,15 @@ app.post("/upload", async (req, res) => {
 
   try {
     const result = await cloudinary.uploader.upload(image, {
+      upload_preset: "drawsol_preset", // Usar el preset que creaste
       folder: "drawsol_gallery",
       tags: [category],
       public_id: `${artName}_${Date.now()}`,
       resource_type: "image",
-      context: {
-        caption: artName,
-        wallet: wallet,
-        category: category
-      }
+      context: `caption=${artName}|wallet=${wallet}|category=${category}` // Formato de cadena para el context
     });
 
-    // Log temporal para depurar la respuesta de Cloudinary
+    // Log temporal para depurar
     console.log("✅ Respuesta de Cloudinary al subir imagen:", JSON.stringify(result, null, 2));
 
     res.json({ url: result.secure_url });
@@ -70,7 +67,6 @@ app.get("/gallery", async (req, res) => {
   try {
     let resources;
 
-    // Obtener imágenes de Cloudinary
     if (category && category !== "all") {
       const result = await cloudinary.api.resources_by_tag(category, {
         resource_type: "image",
@@ -91,14 +87,12 @@ app.get("/gallery", async (req, res) => {
       resources = result.resources;
     }
 
-    // Log temporal para depurar (lo eliminaremos después)
+    // Log temporal para depurar
     console.log("📸 Respuesta completa de Cloudinary:", JSON.stringify(resources, null, 2));
 
-    // Obtener los conteos de votos desde la vista votos_count
     const votesResult = await pool.query("SELECT image_id, vote_count FROM votos_count");
     const votesMap = new Map(votesResult.rows.map(row => [row.image_id, row.vote_count]));
 
-    // Mapear los recursos a los datos que necesita el frontend
     const images = resources.map((img) => {
       const caption = img.context?.caption || img.context?.custom?.["custom.caption"] || "Sin título";
       const wallet = img.context?.wallet || img.context?.custom?.["custom.wallet"] || "Desconocido";
@@ -114,7 +108,7 @@ app.get("/gallery", async (req, res) => {
       };
     });
 
-    // Log temporal para depurar (lo eliminaremos después)
+    // Log temporal para depurar
     console.log("✅ Datos enviados al frontend:", images);
     res.json(images);
   } catch (error) {
@@ -138,7 +132,7 @@ app.get("/test-metadata/:publicId", async (req, res) => {
       context: true
     });
 
-    // Log temporal para depurar (lo eliminaremos después)
+    // Log temporal para depurar
     console.log("✅ Metadatos de la imagen:", JSON.stringify(result, null, 2));
     res.json(result);
   } catch (error) {
@@ -150,7 +144,6 @@ app.get("/test-metadata/:publicId", async (req, res) => {
 // RUTA PARA ACTUALIZAR METADATOS DE IMÁGENES EXISTENTES
 app.post("/update-metadata", async (req, res) => {
   try {
-    // Obtener todas las imágenes de la carpeta drawsol_gallery
     const result = await cloudinary.api.resources({
       type: "upload",
       prefix: "drawsol_gallery",
@@ -162,14 +155,13 @@ app.post("/update-metadata", async (req, res) => {
 
     const resources = result.resources;
 
-    // Iterar sobre cada imagen y actualizar sus metadatos
     for (const img of resources) {
       const publicId = img.public_id;
-      const currentCaption = img.context?.caption || img.context?.custom?.["custom.caption"] || "Sin título";
+      // Usar valores predeterminados si no hay metadatos
+      const currentCaption = img.context?.caption || img.context?.custom?.["custom.caption"] || img.public_id.split('/').pop().split('_')[0] || "Sin título";
       const currentWallet = img.context?.wallet || img.context?.custom?.["custom.wallet"] || "Desconocido";
       const currentCategory = img.context?.category || img.context?.custom?.["custom.category"] || img.tags?.[0] || "Sin categoría";
 
-      // Actualizar los metadatos con las nuevas claves (sin prefijo "custom.")
       await cloudinary.uploader.explicit(publicId, {
         type: "upload",
         resource_type: "image",
@@ -197,15 +189,11 @@ const nacl = require("tweetnacl");
 app.post("/vote", async (req, res) => {
   const { user_wallet, image_id, signature, message } = req.body;
 
-  console.log("Solicitud de voto recibida:", { user_wallet, image_id, signature, message });
-
   if (!user_wallet || !image_id || !signature || !message) {
-    console.log("Faltan campos obligatorios:", { user_wallet, image_id, signature, message });
     return res.status(400).json({ error: "Faltan campos obligatorios" });
   }
 
   try {
-    // Verificar la firma
     const pubKey = new PublicKey(user_wallet);
     const signatureBuffer = bs58.decode(signature);
     const encodedMessage = new TextEncoder().encode(message);
@@ -217,23 +205,18 @@ app.post("/vote", async (req, res) => {
     );
 
     if (!isValid) {
-      console.log("Firma inválida:", { message, signature });
       return res.status(401).json({ error: "Firma inválida" });
     }
 
-    // Verificar si el usuario ya ha votado por esta imagen
     const existingVote = await pool.query(
       `SELECT * FROM votos WHERE user_wallet = $1 AND image_id = $2`,
       [user_wallet, image_id]
     );
 
     if (existingVote.rows.length > 0) {
-      console.log("El usuario ya ha votado por esta imagen:", { user_wallet, image_id });
       return res.status(403).json({ error: "Ya has votado por esta imagen" });
     }
 
-    // Registrar el voto
-    console.log("Registrando voto en la base de datos...");
     const result = await pool.query(
       `INSERT INTO votos (user_wallet, image_id, created_at)
        VALUES ($1, $2, NOW())
@@ -241,7 +224,6 @@ app.post("/vote", async (req, res) => {
       [user_wallet, image_id]
     );
 
-    console.log("✅ Voto registrado con éxito:", result.rows[0]);
     res.status(200).json({ message: "✅ Voto registrado", vote: result.rows[0] });
   } catch (err) {
     console.error("❌ Error procesando voto:", err);
